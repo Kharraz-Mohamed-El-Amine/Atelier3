@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <link rel="stylesheet" href="./style.css" >
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1> Gestionnaire de Produits</h1>
+        <p>Analysez et gérez vos données produits en temps réel</p>
+    </div>
+
+    <div class="controls">
+        <div class="control-group">
+            <div class="control-item">
+                <label> Charger fichier JSON</label>
+                <div class="file-input-wrapper">
+                    <input type="file" id="fileInput" class="file-input" accept=".json">
+                    <label for="fileInput" class="file-input-label">Choisir un fichier</label>
+                </div>
+            </div>
+
+            <div class="control-item">
+                <label> Recherche par nom</label>
+                <input type="text" id="searchInput" placeholder="Rechercher un produit...">
+            </div>
+
+            <div class="control-item">
+                <label> Filtrer par catégorie</label>
+                <select id="categoryFilter">
+                    <option value="">Toutes les catégories</option>
+                </select>
+            </div>
+
+            <div class="control-item">
+                <label> Trier par</label>
+                <select id="sortBy">
+                    <option value="name">Nom</option>
+                    <option value="price">Prix</option>
+                    <option value="stock">Stock</option>
+                    <option value="category">Catégorie</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="stats" id="statsContainer">
+    </div>
+
+    <div class="content">
+        <div class="products-section">
+            <h2 class="section-title"> Liste des Produits</h2>
+            <div id="productsContainer">
+                <div class="no-data">
+                    Chargez un fichier JSON pour afficher les produits
+                </div>
+            </div>
+        </div>
+
+        <div class="charts-section">
+            <h2 class="section-title"> Tableaux de Bord</h2>
+
+            <div class="chart-container">
+                <canvas id="categoryChart"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="stockChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let allProducts = [];
+    let filteredProducts = [];
+    let categoryChart = null;
+    let stockChart = null;
+
+    const sampleData = [
+        { name: 'Ordinateur portable', price: 999, category: 'Électronique', stock: 10 },
+        { name: 'Smartphone', price: 599, category: 'Électronique', stock: 25 },
+        { name: 'Chaise de bureau', price: 149, category: 'Mobilier', stock: 5 },
+        { name: 'Livre JavaScript', price: 29, category: 'Livres', stock: 50 },
+        { name: 'Casque audio', price: 79, category: 'Électronique', stock: 3 },
+        { name: 'Table de travail', price: 299, category: 'Mobilier', stock: 8 },
+        { name: 'Clavier mécanique', price: 89, category: 'Électronique', stock: 15 },
+        { name: 'Guide Python', price: 35, category: 'Livres', stock: 30 },
+        { name: 'Lampe LED', price: 45, category: 'Mobilier', stock: 2 },
+        { name: 'Souris gaming', price: 55, category: 'Électronique', stock: 20 }
+    ];
+
+    document.addEventListener('DOMContentLoaded', function() {
+        loadProducts(sampleData);
+    });
+
+    document.getElementById('fileInput').addEventListener('change', function(event) {
+        const file = event.target.files[0];
+        if (file && file.type === 'application/json') {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    loadProducts(Array.isArray(data) ? data : [data]);
+                } catch (error) {
+                    alert('Erreur lors de la lecture du fichier JSON: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+        } else {
+            alert('Veuillez sélectionner un fichier JSON valide.');
+        }
+    });
+
+    function loadProducts(products) {
+        allProducts = products;
+        filteredProducts = [...allProducts];
+
+        updateCategoryFilter();
+        updateDisplay();
+        updateCharts();
+    }
+
+    function updateCategoryFilter() {
+        const categoryFilter = document.getElementById('categoryFilter');
+        const categories = [...new Set(allProducts.map(p => p.category))];
+
+        categoryFilter.innerHTML = '<option value="">Toutes les catégories</option>';
+        categories.forEach(category => {
+            const option = document.createElement('option');
+            option.value = category;
+            option.textContent = category;
+            categoryFilter.appendChild(option);
+        });
+    }
+
+    function applyFilters() {
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        const categoryFilter = document.getElementById('categoryFilter').value;
+        const sortBy = document.getElementById('sortBy').value;
+
+        filteredProducts = allProducts.filter(product => {
+            const matchesSearch = product.name.toLowerCase().includes(searchTerm);
+            const matchesCategory = !categoryFilter || product.category === categoryFilter;
+            return matchesSearch && matchesCategory;
+        });
+
+        filteredProducts.sort((a, b) => {
+            switch(sortBy) {
+                case 'price':
+                    return b.price - a.price;
+                case 'stock':
+                    return a.stock - b.stock;
+                case 'category':
+                    return a.category.localeCompare(b.category);
+                default:
+                    return a.name.localeCompare(b.name);
+            }
+        });
+
+        updateDisplay();
+    }
+
+    function updateDisplay() {
+        updateStats();
+        updateProductsList();
+    }
+
+    function updateStats() {
+        const totalProducts = filteredProducts.length;
+        const totalValue = filteredProducts.reduce((sum, p) => sum + (p.price * p.stock), 0);
+        const lowStockProducts = filteredProducts.filter(p => p.stock < 10).length;
+        const averagePrice = totalProducts > 0 ? (filteredProducts.reduce((sum, p) => sum + p.price, 0) / totalProducts) : 0;
+
+        const statsContainer = document.getElementById('statsContainer');
+        statsContainer.innerHTML = `
+                <div class="stat-card">
+                    <h3>${totalProducts}</h3>
+                    <p>Produits</p>
+                </div>
+                <div class="stat-card">
+                    <h3>${totalValue.toLocaleString()}€</h3>
+                    <p>Valeur Totale</p>
+                </div>
+                <div class="stat-card">
+                    <h3>${lowStockProducts}</h3>
+                    <p>Stock Faible</p>
+                </div>
+                <div class="stat-card">
+                    <h3>${averagePrice.toFixed(0)}€</h3>
+                    <p>Prix Moyen</p>
+                </div>
+            `;
+    }
+
+    function updateProductsList() {
+        const container = document.getElementById('productsContainer');
+
+        if (filteredProducts.length === 0) {
+            container.innerHTML = '<div class="no-data">Aucun produit trouvé</div>';
+            return;
+        }
+
+        container.innerHTML = filteredProducts.map(product => `
+                <div class="product-card ${product.stock < 10 ? 'low-stock' : ''}">
+                    <div class="product-name">${product.name}</div>
+                    <div class="product-details">
+                        <div class="product-detail">
+                            <strong>${product.price}€</strong><br>
+                            <small>Prix</small>
+                        </div>
+                        <div class="product-detail">
+                            <strong>${product.category}</strong><br>
+                            <small>Catégorie</small>
+                        </div>
+                        <div class="product-detail">
+                            <strong>${product.stock}</strong><br>
+                            <small>Stock ${product.stock < 10 ? '⚠️' : '✅'}</small>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+    }
+
+    function updateCharts() {
+        updateCategoryChart();
+        updateStockChart();
+    }
+
+    function updateCategoryChart() {
+        const ctx = document.getElementById('categoryChart').getContext('2d');
+
+        if (categoryChart) {
+            categoryChart.destroy();
+        }
+
+        const categoryData = {};
+        filteredProducts.forEach(product => {
+            categoryData[product.category] = (categoryData[product.category] || 0) + 1;
+        });
+
+        const labels = Object.keys(categoryData);
+        const data = Object.values(categoryData);
+        const colors = [
+            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0',
+            '#9966FF', '#FF9F40', '#FF6384', '#C9CBCF'
+        ];
+
+        categoryChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: colors.slice(0, labels.length),
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Répartition par Catégorie',
+                        font: { size: 16, weight: 'bold' }
+                    },
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    }
+
+    function updateStockChart() {
+        const ctx = document.getElementById('stockChart').getContext('2d');
+
+        if (stockChart) {
+            stockChart.destroy();
+        }
+
+        const sortedProducts = [...filteredProducts]
+            .sort((a, b) => a.stock - b.stock)
+            .slice(0, 10);
+
+        const labels = sortedProducts.map(p => p.name.length > 15 ?
+            p.name.substring(0, 15) + '...' : p.name);
+        const data = sortedProducts.map(p => p.stock);
+        const colors = data.map(stock => stock < 10 ? '#FF6384' : '#36A2EB');
+
+        stockChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Stock',
+                    data: data,
+                    backgroundColor: colors,
+                    borderColor: colors,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Niveaux de Stock (Plus bas en premier)',
+                        font: { size: 16, weight: 'bold' }
+                    },
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Quantité en Stock'
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            maxRotation: 45
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    document.getElementById('searchInput').addEventListener('input', applyFilters);
+    document.getElementById('categoryFilter').addEventListener('change', applyFilters);
+    document.getElementById('sortBy').addEventListener('change', applyFilters);
+</script>
+</body>
+</html>
