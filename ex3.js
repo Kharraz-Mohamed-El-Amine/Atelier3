@@ -10,10 +10,10 @@ League of Legends
 Grand Theft Auto`;
 const traiterJeux = (texte) => {
     return texte
-        .split('\n')                           // Diviser les noms de jeux
-        .map(jeu => jeu.toUpperCase())         // Convertir en majuscules
-        .filter(jeu => jeu.includes('I'))      // Filtrer les jeux avec 'I'
-        .forEach(jeu => console.log(` ${jeu}`)); // Imprimer chaque jeu
+        .split('\n')                           
+        .map(jeu => jeu.toUpperCase())         
+        .filter(jeu => jeu.includes('I'))      
+        .forEach(jeu => console.log(` ${jeu}`)); 
 };
 
 traiterJeux(texte);
